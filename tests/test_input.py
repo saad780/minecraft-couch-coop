@@ -64,30 +64,49 @@ class KernelIntegrationTests(unittest.TestCase):
         import time
         from mc_couch.linux_input import InputDevice
 
+        physical = VirtualGamepad(96, test=True)
         proxy = VirtualGamepad(97, test=True)
         try:
             for _ in range(50):
-                if proxy.ready():
+                if proxy.ready() and physical.ready():
                     break
                 time.sleep(0.02)
             self.assertTrue(proxy.ready())
+            self.assertTrue(physical.ready())
             node = proxy.event
-            source = InputDevice(node)
+            source = InputDevice(physical.event)
+            listener = InputDevice(proxy.event)
             try:
-                proxy.write(E.EV_KEY, E.BTN_SOUTH, 1)
-                proxy.syn()
+                physical.write(E.EV_KEY, E.BTN_SOUTH, 1)
+                physical.syn()
                 time.sleep(0.03)
-                events = source.read()
+                for event in source.read():
+                    proxy.forward(event, source)
+                time.sleep(0.03)
+                events = listener.read()
                 self.assertTrue(
                     any(e.code == E.BTN_SOUTH and e.value == 1 for e in events)
                 )
                 proxy.reset()
             finally:
                 source.close()
-            reopened = InputDevice(node)
-            reopened.close()
+                listener.close()
+            # Remove and recreate the source device; the client-facing proxy
+            # remains alive at the same node instead of becoming a new gamepad.
+            physical.close()
+            physical = VirtualGamepad(96, test=True)
+            reopened = InputDevice(physical.event)
+            try:
+                physical.write(E.EV_KEY, E.BTN_EAST, 1)
+                physical.syn()
+                time.sleep(0.03)
+                for event in reopened.read():
+                    proxy.forward(event, reopened)
+            finally:
+                reopened.close()
             self.assertEqual(proxy.event, node)
         finally:
+            physical.close()
             proxy.close()
 
 

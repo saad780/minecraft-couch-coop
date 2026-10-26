@@ -11,7 +11,7 @@ from unittest.mock import patch
 from mc_couch.assets import maven_path, rules_allow, selected_libraries
 from mc_couch.config import Settings, atomic_json, runtime_root
 from mc_couch.game import local_command, prepare_directory
-from mc_couch.prism import wrapper_main
+from mc_couch.prism import PrismGame, wrapper_main
 from mc_couch.steam import decode, encode, sync
 
 
@@ -137,6 +137,24 @@ class SteamMutationTests(unittest.TestCase):
 
 
 class PrismContractTests(unittest.TestCase):
+    def test_leaving_during_prism_download_cancels_the_pending_launch(self):
+        from unittest.mock import Mock
+
+        with tempfile.TemporaryDirectory() as temp:
+            game = PrismGame.__new__(PrismGame)
+            game.started = time.monotonic()
+            game.cancelled = False
+            game.nonce = "pending-launch"
+            game.request = Path(temp) / "request.json"
+            game.status = Path(temp) / "status.json"
+            game.cli = Mock()
+            game.cli.poll.return_value = None
+            atomic_json(game.request, {"nonce": game.nonce, "cancelled": False})
+            self.assertIsNone(game.poll())
+            game.terminate()
+            self.assertEqual(game.poll(), 0)
+            self.assertTrue(json.loads(game.request.read_text())["cancelled"])
+
     def test_stale_cancelled_and_nonprivate_requests_rejected(self):
         with (
             tempfile.TemporaryDirectory() as temp,

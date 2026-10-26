@@ -161,6 +161,7 @@ def prepare_instance(profile, settings):
 class PrismGame:
     def __init__(self, profile, settings, proxy, slot):
         self.started = time.monotonic()
+        self.cancelled = False
         self.directory = instance_directory(profile)
         identity, self.directory = prepare_instance(profile, settings)
         self.request = runtime_root() / "requests" / (identity + ".json")
@@ -229,15 +230,18 @@ class PrismGame:
         return self.state().get("pid")
 
     def poll(self):
+        cli_status = self.cli.poll()
         state = self.state()
         if "exit_code" in state:
             return state["exit_code"]
+        if self.cancelled and not state.get("pid"):
+            return 0
         if state.get("pid") and not Path("/proc/" + str(state["pid"])).exists():
             return 1
         if time.monotonic() - self.started > 600 and not self.pid:
             return 1
-        if self.cli.poll() not in (None, 0) and not self.pid:
-            return self.cli.returncode
+        if cli_status not in (None, 0) and not self.pid:
+            return cli_status
         return None
 
     def java_pid(self):
@@ -256,6 +260,7 @@ class PrismGame:
         return None
 
     def terminate(self):
+        self.cancelled = True
         try:
             request = json.loads(self.request.read_text())
             if request.get("nonce") == self.nonce:
@@ -264,7 +269,7 @@ class PrismGame:
         except (OSError, ValueError):
             pass
         pid = self.pid
-        if pid:
+        if pid and self.poll() is None:
             try:
                 os.killpg(pid, signal.SIGTERM)
             except ProcessLookupError:
@@ -272,7 +277,7 @@ class PrismGame:
 
     def kill(self):
         pid = self.pid
-        if pid:
+        if pid and self.poll() is None:
             try:
                 os.killpg(pid, signal.SIGKILL)
             except ProcessLookupError:
@@ -329,6 +334,15 @@ def wrapper_main(argv):
     )
     state = {"nonce": request["nonce"], "pid": process.pid, "started": time.time()}
     atomic_json(status, state)
+
+    # A player can leave while Prism is downloading or spawning Java. Recheck
+    # after publishing the PID so either side of that race stops the child.
+    current = json.loads(request_path.read_text())
+    if current.get("cancelled") or current.get("nonce") != request["nonce"]:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
 
     def stop(*_):
         try:

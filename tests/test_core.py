@@ -60,6 +60,8 @@ class ConfigTests(unittest.TestCase):
             ("width", 200),
             ("heap_mb", 100),
             ("account_mode", "unknown"),
+            ("height", 600),
+            ("width", 800),
         ]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 Settings(**{key: value}).validate()

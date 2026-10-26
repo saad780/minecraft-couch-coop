@@ -66,7 +66,7 @@ Package installation depends on your distribution. On SteamOS, first run the doc
 
    Resolve any `CHECK` items relevant to your hardware before playing. With no controller connected yet, the controller checks will naturally be incomplete.
 
-4. In Setup, enter your server address, select an account mode, and choose a display size. Use **1280 × 800** for a Steam Deck's internal screen, or your intended external display size. Start with **30 FPS**, **2 GiB per player**, and the supplied render distances.
+4. In Setup, enter your server address, select an account mode, and choose a display size. Use **1280 × 800** for a Steam Deck's internal screen, or your intended external display size. Three/four-player layouts require at least **1280 × 720**; two players need at least 720 pixels of height. Start with **30 FPS**, **2 GiB per player**, and the supplied render distances.
 5. Click **Save settings & install game files** and wait for it to finish. For Microsoft mode, complete the account steps below.
 6. Click **Add to Steam**. If Steam is running on SteamOS, the shortcut is queued for its next start. Return to Gaming Mode/restart Steam when convenient. On other Linux desktops, exit Steam fully, run `~/.local/bin/minecraft-couch steam-sync`, then reopen it.
 7. Open **Minecraft Couch Co-op** in Steam, choose the **Gamepad** controller template for each controller, and launch it. Use the native Linux shortcut; do not enable Proton for it.

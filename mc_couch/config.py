@@ -157,6 +157,14 @@ class Settings:
                 or not low <= value <= high
             ):
                 raise ValueError(f"{field} must be between {low} and {high}.")
+        if self.max_players >= 2 and self.height < 720:
+            raise ValueError(
+                "Two or more players need a display height of at least 720 pixels."
+            )
+        if self.max_players >= 3 and self.width < 1280:
+            raise ValueError(
+                "Three or four players need a display width of at least 1280 pixels."
+            )
         return self
 
     @classmethod
