@@ -1,0 +1,37 @@
+[
+  {
+    "project": "sodium",
+    "version_id": "rkdTcxoT",
+    "file": "sodium-fabric-0.8.14+mc1.21.11.jar",
+    "url": "https://cdn.modrinth.com/data/AANobbMI/versions/rkdTcxoT/sodium-fabric-0.8.14%2Bmc1.21.11.jar",
+    "sha512": "04c43f9e8534b87a52c42ffd51b0e344d4ef92dc9cc52da33d13af6a18bf74b05380d2027f1e0db982698d0aff274c42741c1e21b313b0cd75ed3af005fc98d9"
+  },
+  {
+    "project": "ferrite-core",
+    "version_id": "Ii0gP3D8",
+    "file": "ferritecore-8.2.0-fabric.jar",
+    "url": "https://cdn.modrinth.com/data/uXXizFIs/versions/Ii0gP3D8/ferritecore-8.2.0-fabric.jar",
+    "sha512": "3210926a82eb32efd9bcebabe2f6c053daf5c4337eebc6d5bacba96d283510afbde646e7e195751de795ec70a2ea44fef77cb54bf22c8e57bb832d6217418869"
+  },
+  {
+    "project": "controlify",
+    "version_id": "qZW7FPjm",
+    "file": "controlify-3.0.1+lts+1.21.11-fabric.jar",
+    "url": "https://cdn.modrinth.com/data/DOUdJVEm/versions/qZW7FPjm/controlify-3.0.1%2Blts%2B1.21.11-fabric.jar",
+    "sha512": "1a7bbcba7b721b28ed5e46fa5e94bf795251c9476939f34049a83d64a16ce56cdb2a6841c768f4393fa1b1ba67215c67fe7fdd14a29d1770f03d4c812b10fcde"
+  },
+  {
+    "project": "fabric-api",
+    "version_id": "6qAuTtLR",
+    "file": "fabric-api-0.141.6+1.21.11.jar",
+    "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/6qAuTtLR/fabric-api-0.141.6%2B1.21.11.jar",
+    "sha512": "852d3682c4f353fd0ca86546af8578513e8bcf628377fa9d49c556bc59c5024c69ab56c92fc6dfba11fed19e4316a3f5636e7e07fd3d96f7043b531aef59b637"
+  },
+  {
+    "project": "yacl",
+    "version_id": "pHWDw3Vc",
+    "file": "yet_another_config_lib_v3-3.8.2+1.21.11-fabric.jar",
+    "url": "https://cdn.modrinth.com/data/1eAoo2KR/versions/pHWDw3Vc/yet_another_config_lib_v3-3.8.2%2B1.21.11-fabric.jar",
+    "sha512": "392db7d471030cca27483ecf58c626a14cd73d71a18afe6d4173c6b030948b8a925b36e708d4cc2c897dfa3f20a7f23b999fc18aa6d36c156da29037601153ac"
+  }
+]

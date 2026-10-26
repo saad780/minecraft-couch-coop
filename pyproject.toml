@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minecraft-couch-coop"
+version = "0.1.0"
+description = "Controller-driven Minecraft Java couch multiplayer for SteamOS"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "saad780"}]
+classifiers = ["Development Status :: 3 - Alpha", "Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3"]
+
+[project.urls]
+Homepage = "https://github.com/saad780/minecraft-couch-coop"
+Issues = "https://github.com/saad780/minecraft-couch-coop/issues"
+
+[project.scripts]
+minecraft-couch = "mc_couch.cli:main"
+
+[tool.setuptools]
+packages = ["mc_couch"]
+
+[tool.setuptools.package-data]
+mc_couch = ["mods.lock.json"]
