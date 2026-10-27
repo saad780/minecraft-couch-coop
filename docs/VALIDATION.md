@@ -1,4 +1,4 @@
-# Validation for v0.1.1
+# Validation for v0.1.2
 
 This release separates observed behavior from features awaiting hardware validation.
 
@@ -44,7 +44,9 @@ The Gaming Mode run exposed a picker regression: filtering a profile already cla
 
 The gameplay image in the README is an actual capture of the completed 0.1.1 Gaming Mode run in a disposable demo world. The controller attachments and button/stick movements were automated; this was not four people playing on four physical Bluetooth controllers. Interface-only captures remain clearly labeled separately. A sanitized [machine-readable result](validation/steamos-local-profiles.json) records the acceptance scope without runtime addresses, controller identifiers, or private player data.
 
-## Interface refresh (unreleased)
+## Interface changes in 0.1.2
+
+The Gaming Mode acceptance above ran on 0.1.1 and has not been repeated for 0.1.2. The 0.1.2 runs below started no Minecraft client, so the revised window-placement script was exercised with the picker windows only.
 
 The redesigned picker and name keyboard were run on the same SteamOS machine in an offscreen KWin/Xwayland compositor. The run used the device's own fonts, four synthetic controllers, a throwaway home directory and a stand-in `steam` command; no Minecraft client started. It ran at 1920 × 1080 and 1280 × 800, and all 20 checks passed at each size:
 
