@@ -6,9 +6,9 @@ Connect a controller, choose a profile, and join your Java server. Other players
 
 ![Four Minecraft Java clients playing together on SteamOS](docs/screenshots/four-player-gameplay.png)
 
-*Actual Minecraft gameplay captured from an isolated test compositor on SteamOS. Four automated Linux gamepads drive four independent clients in a disposable local demo world, using example profiles.*
+*Actual gameplay after launching the public build through Steam in Gaming Mode. Four automated Linux gamepads drive four independent Minecraft clients in a disposable local demo world, using example profiles.*
 
-> **v0.1.1 is an early preview.** Four real clients completed an automated local-world test on one SteamOS machine with synthetic Linux gamepads. The Steam/Gaming Mode launch route was also exercised. The full Gaming Mode rerun after the picker fix still needs its final result collected, and fresh physical-controller and Microsoft sign-in coverage remains pending. See [validation](docs/VALIDATION.md) for the exact scope.
+> **v0.1.1 is an early preview.** The public build passed a complete four-client test through Steam in Gaming Mode on one SteamOS machine, including independent input, reconnect, and leave/rejoin. That acceptance run used synthetic Linux gamepads; fresh physical-controller combinations and Microsoft sign-in still need coverage. See [validation](docs/VALIDATION.md) for the exact scope.
 
 ## What it does
 

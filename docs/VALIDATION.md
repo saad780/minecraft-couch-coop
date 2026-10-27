@@ -31,21 +31,22 @@ The test covered:
 
 - A fresh installation from the published 0.1.0 archive and independent publisher downloads on the machine.
 - The 0.1.1 candidate installer, all 27 checks including the kernel input check, and the profile-selection regression fix.
-- Four-client world acceptance in a separate offscreen KWin/Xwayland compositor. Separately, the public CLI launched through Steam in Gaming Mode and began joining clients before the picker regression was found.
+- A complete 0.1.1 run through Steam in Gaming Mode using the public CLI, private D-Bus session, nested KWin and Xwayland. An earlier offscreen four-client run also passed.
 - Four actual Fabric/Controlify Minecraft clients joining the local world, rendered on the AMD GPU rather than a software renderer.
 - Exactly one assigned MC Couch Pad detected by each Java client.
-- Camera input: player 1's right stick changed its server-reported rotation while the other three remained unchanged. The other clients also responded to injected controller input; on a fresh client, an A press may be needed to switch Controlify into controller input mode.
+- Independent camera input for every player: each right stick changed only its corresponding player's server-reported rotation. On a fresh client, an A press may be needed to switch Controlify into controller input mode.
 - Controller disconnect/reconnect keeping the same client PID and proxy device.
 - The real Back + Start input chord closing only its own client while the other three continued.
 - Player rejoin without restarting the session.
+- Clean shutdown: test clients/server stopped, original Steam launcher restored byte for byte, temporary sleep inhibitor released, and SSH/Tailscale still active.
 
-The Gaming Mode run exposed a picker regression: filtering a profile already claimed by another player shifted the remembered numeric selection. Version 0.1.1 preserves the selected name and refreshes available profiles when other players join or leave. The regression has pure selection tests and an actual GTK picker test under Xvfb, both passing. The 0.1.1 candidate and 27 checks were installed and passed on the SteamOS host. Its full remembered-profile Gaming Mode rerun was started, but the host stopped responding over LAN and Tailscale before the result could be collected; that final check remains pending.
+The Gaming Mode run exposed a picker regression: filtering a profile already claimed by another player shifted the remembered numeric selection. Version 0.1.1 preserves the selected name and refreshes available profiles when other players join or leave. The regression has pure selection tests and an actual GTK picker test under Xvfb, both passing. The 0.1.1 candidate and 27 checks were installed and passed on the SteamOS host. The full remembered-profile Gaming Mode rerun subsequently passed all nine acceptance checkpoints, including controller reconnect and player leave/rejoin. An earlier attempt was interrupted by system sleep, confirmed in the host journal. The final run used a temporary sleep inhibitor, exited automatically, and released that inhibitor.
 
-The gameplay image in the README is an actual capture of the completed offscreen four-client run in a disposable demo world. The controller attachments and button/stick movements were automated; this was not four people playing on four physical Bluetooth controllers. Interface-only captures remain clearly labeled separately. A sanitized [machine-readable result](validation/steamos-local-profiles.json) records the acceptance scope without runtime addresses, controller identifiers, or private player data.
+The gameplay image in the README is an actual capture of the completed 0.1.1 Gaming Mode run in a disposable demo world. The controller attachments and button/stick movements were automated; this was not four people playing on four physical Bluetooth controllers. Interface-only captures remain clearly labeled separately. A sanitized [machine-readable result](validation/steamos-local-profiles.json) records the acceptance scope without runtime addresses, controller identifiers, or private player data.
 
 ## Remaining limits
 
-A complete post-fix four-client Gaming Mode rerun still needs confirmation. Microsoft sign-in, token refresh and multi-account joining with licensed accounts have not been exercised end to end. Other machines/distributions, a Steam Deck's internal display, fresh combinations of physical controllers/Bluetooth firmware, suspend/resume, and reboot persistence of a new public installation need more testing. The earlier original installation's physical-controller observations do not replace those checks. Automated camera/connection tests do not guarantee an absence of all performance or radio-interference problems during a long play session.
+Microsoft sign-in, token refresh and multi-account joining with licensed accounts have not been exercised end to end. Other machines/distributions, a Steam Deck's internal display, fresh combinations of physical controllers/Bluetooth firmware, suspend/resume, and reboot persistence of a new public installation need more testing. The earlier original installation's physical-controller observations do not replace those checks. Automated camera/connection tests do not guarantee an absence of all performance or radio-interference problems during a long play session.
 
 ## Useful hardware acceptance check
 

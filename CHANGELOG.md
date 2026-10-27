@@ -5,7 +5,7 @@
 - Fix remembered profile selections changing when another player joins or leaves. Keep the highlighted name stable as the available list changes.
 - Refresh profile pickers when other seats release their profiles.
 - Fix hardware tests to wait for udev permissions after reconnect and isolate the uninstall test from a running host Steam process.
-- Validate a separate installation with four real Minecraft clients and automated controllers in an offscreen compositor, and exercise the Steam/Gaming Mode launch route. Add a real gameplay screenshot and explicit remaining validation scope.
+- Complete four-client acceptance through Steam in Gaming Mode, including independent input, reconnect and leave/rejoin with automated controllers. Add a real gameplay screenshot and explicit remaining validation scope.
 - Add regression tests for remembered names, leave-menu selection and an already-claimed profile.
 
 ## 0.1.0 — 2026-10-26
