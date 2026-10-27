@@ -8,7 +8,7 @@ Connect a controller, choose a profile, and join your Java server. Other players
 
 *Actual gameplay after launching the public build through Steam in Gaming Mode. Four automated Linux gamepads drive four independent Minecraft clients in a disposable local demo world, using example profiles.*
 
-> **v0.1.1 is an early preview.** The public build passed a complete four-client test through Steam in Gaming Mode on one SteamOS machine, including independent input, reconnect, and leave/rejoin. That acceptance run used synthetic Linux gamepads; fresh physical-controller combinations and Microsoft sign-in still need coverage. See [validation](docs/VALIDATION.md) for the exact scope.
+> **v0.1.2 is an early preview.** It redesigns the profile picker and name keyboard so every panel fits its part of the screen, which fixes the name keyboard flickering with three or four players. v0.1.1 passed a complete four-client test through Steam in Gaming Mode on one SteamOS machine, including independent input, reconnect, and leave/rejoin; v0.1.2's interface was rechecked on the same machine in an offscreen compositor. Those runs used synthetic Linux gamepads; fresh physical-controller combinations, Steam's on-screen keyboard in Gaming Mode and Microsoft sign-in still need coverage. See [validation](docs/VALIDATION.md) for the exact scope.
 
 ## What it does
 
@@ -52,13 +52,13 @@ Package installation depends on your distribution. On SteamOS, first run the doc
 ## Install
 
 1. Switch to **Desktop Mode**.
-2. Download `minecraft-couch-coop-0.1.1.tar.gz` and `SHA256SUMS` from the [v0.1.1 preview release](https://github.com/saad780/minecraft-couch-coop/releases/tag/v0.1.1).
+2. Download `minecraft-couch-coop-0.1.2.tar.gz` and `SHA256SUMS` from the [v0.1.2 preview release](https://github.com/saad780/minecraft-couch-coop/releases/tag/v0.1.2).
 3. Open Konsole in the download folder and run:
 
    ```bash
    sha256sum -c SHA256SUMS
-   tar -xzf minecraft-couch-coop-0.1.1.tar.gz
-   cd minecraft-couch-coop-0.1.1
+   tar -xzf minecraft-couch-coop-0.1.2.tar.gz
+   cd minecraft-couch-coop-0.1.2
    ./install.sh
    ~/.local/bin/minecraft-couch doctor
    ~/.local/bin/minecraft-couch setup

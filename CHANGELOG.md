@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-10-27
 
 - Redesign the lobby, profile picker and name keyboard: player colours, profile rows with avatars, a QWERTY keyboard with Shift/caps lock, hold-to-repeat navigation, queue position, a reconnect countdown, and lobby cards for each slot.
 - Size every panel to fit its screen region, down to a 640 × 360 quarter-screen. A panel larger than its region made GTK and the layout script fight over the window size, so the name keyboard flickered. GUI tests now check every layout at 1920 × 1080, 1280 × 800 and 1280 × 720.
