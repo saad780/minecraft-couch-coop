@@ -4,11 +4,11 @@
 
 Connect a controller, choose a profile, and join your Java server. Other players can join or leave without restarting everyone's game. Launch it from Steam's Gaming Mode like a regular game.
 
-![Four independent controller profile pickers](docs/screenshots/profile-picker.png)
+![Four Minecraft Java clients playing together on SteamOS](docs/screenshots/four-player-gameplay.png)
 
-*Actual launcher UI at 1280 × 800, captured with four simulated controller attachments and example profiles. This is an interface preview, not a gameplay screenshot.*
+*Actual Minecraft gameplay captured from an isolated test compositor on SteamOS. Four automated Linux gamepads drive four independent clients in a disposable local demo world, using example profiles.*
 
-> **v0.1.0 is an early preview.** The original installation was exercised with four clients on one SteamOS machine. This portable installer adds new configuration, downloads, and optional Prism authentication. It has automated and kernel input tests, but has not completed a fresh four-controller gameplay test on another machine. Microsoft sign-in is delegated to Prism and has not been tested end to end in this release. See [validation](docs/VALIDATION.md) before relying on it for a game night.
+> **v0.1.1 is an early preview.** Four real clients completed an automated local-world test on one SteamOS machine with synthetic Linux gamepads. The Steam/Gaming Mode launch route was also exercised. The full Gaming Mode rerun after the picker fix still needs its final result collected, and fresh physical-controller and Microsoft sign-in coverage remains pending. See [validation](docs/VALIDATION.md) for the exact scope.
 
 ## What it does
 
@@ -52,13 +52,13 @@ Package installation depends on your distribution. On SteamOS, first run the doc
 ## Install
 
 1. Switch to **Desktop Mode**.
-2. Download `minecraft-couch-coop-0.1.0.tar.gz` and `SHA256SUMS` from the [v0.1.0 preview release](https://github.com/saad780/minecraft-couch-coop/releases/tag/v0.1.0).
+2. Download `minecraft-couch-coop-0.1.1.tar.gz` and `SHA256SUMS` from the [v0.1.1 preview release](https://github.com/saad780/minecraft-couch-coop/releases/tag/v0.1.1).
 3. Open Konsole in the download folder and run:
 
    ```bash
    sha256sum -c SHA256SUMS
-   tar -xzf minecraft-couch-coop-0.1.0.tar.gz
-   cd minecraft-couch-coop-0.1.0
+   tar -xzf minecraft-couch-coop-0.1.1.tar.gz
+   cd minecraft-couch-coop-0.1.1
    ./install.sh
    ~/.local/bin/minecraft-couch doctor
    ~/.local/bin/minecraft-couch setup
@@ -95,6 +95,10 @@ The project imports only Minecraft profile names and UUIDs. Passwords and refres
 
 ## Play together
 
+![Four independent controller profile pickers](docs/screenshots/profile-picker.png)
+
+*Actual picker interface with example profiles and four simulated controller attachments.*
+
 ![Empty lobby waiting for controllers](docs/screenshots/lobby.png)
 
 *Actual launcher lobby; game windows appear after players choose a profile.*
@@ -113,7 +117,7 @@ Button labels vary by controller. Up to four controllers can occupy slots; addit
 
 One client starts at a time. A brief queue is normal, especially on the first launch. Once a client enters the world, the next starts after a five-second gap. A failed connection can remain visible for retry; the queue continues after a one-minute startup fallback.
 
-The game's normal Controlify prompts may appear on first use. Complete any controller selection/download prompt on that player's screen. Each client should see exactly **one MC Couch Pad**. The proxy intentionally enables input while its window is unfocused so all screens remain playable.
+The game's normal Controlify prompts may appear on first use. Complete any controller selection/download prompt on that player's screen. Press **A** once inside a fresh client if Controlify has not switched to controller input yet. Each client should see exactly **one MC Couch Pad**. The proxy intentionally enables input while its window is unfocused so all screens remain playable.
 
 ## Troubleshooting
 

@@ -1,0 +1,29 @@
+{
+  "platform": "x86_64 SteamOS",
+  "minecraft": "1.21.11",
+  "fabric_loader": "0.20.1",
+  "gameplay_runtime": "0.1.0",
+  "candidate_runtime": "0.1.1",
+  "input_source": "four synthetic Linux uinput controllers",
+  "world": "disposable loopback vanilla server",
+  "rendering": "AMD GPU; offscreen nested KWin/Xwayland",
+  "observed_passes": [
+    "fresh public archive installation",
+    "independent publisher downloads on device",
+    "four actual clients joined one local world",
+    "each Java client detected only its assigned gamepad",
+    "controller reconnect preserved client PID and proxy",
+    "leave chord closed only its own client",
+    "player rejoined without restarting the other three",
+    "player 1 camera changed while other three cameras remained unchanged",
+    "public CLI started through Steam in Gaming Mode",
+    "0.1.1 candidate and all 27 device-side checks passed",
+    "remembered-profile regression passed actual GTK picker test under Xvfb and GitHub CI"
+  ],
+  "pending": [
+    "collect final full Gaming Mode rerun after picker fix; connection lost",
+    "fresh physical controller combinations",
+    "Microsoft authentication and multi-account gameplay",
+    "suspend/resume and reboot coverage"
+  ]
+}

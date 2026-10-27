@@ -1,4 +1,4 @@
-# Validation for v0.1.0
+# Validation for v0.1.1
 
 This release separates observed behavior from features awaiting hardware validation.
 
@@ -23,11 +23,29 @@ A measured input discovery bug was fixed in that runtime: opening/closing every 
 
 CI runs the portable automated suite on x86_64 Linux. Kernel device tests are an explicit opt-in and are not silently counted as passing in CI.
 
-## Still needs live confirmation
+## SteamOS gameplay acceptance
 
-The SteamOS machine was offline during public packaging. The public installer has not yet completed a fresh four-controller gameplay run there. The new Microsoft backend has not completed sign-in, account refresh, and multi-account joining with licensed accounts. Other SteamOS machines, Steam Deck, other distributions, suspend/resume, and all controller families need testing.
+A separate installation of the public build was exercised on the original x86_64 SteamOS machine after it became available. It used its own home/config/data directories, a disposable vanilla 1.21.11 server bound to loopback, and four synthetic Linux uinput controllers. The existing personal Minecraft cache, NAS server, profiles and world were not used.
 
-The README images show the actual GTK interface, not synthetic Minecraft gameplay. No four-player gameplay screenshot is presented as evidence for this build.
+The test covered:
+
+- A fresh installation from the published 0.1.0 archive and independent publisher downloads on the machine.
+- The 0.1.1 candidate installer, all 27 checks including the kernel input check, and the profile-selection regression fix.
+- Four-client world acceptance in a separate offscreen KWin/Xwayland compositor. Separately, the public CLI launched through Steam in Gaming Mode and began joining clients before the picker regression was found.
+- Four actual Fabric/Controlify Minecraft clients joining the local world, rendered on the AMD GPU rather than a software renderer.
+- Exactly one assigned MC Couch Pad detected by each Java client.
+- Camera input: player 1's right stick changed its server-reported rotation while the other three remained unchanged. The other clients also responded to injected controller input; on a fresh client, an A press may be needed to switch Controlify into controller input mode.
+- Controller disconnect/reconnect keeping the same client PID and proxy device.
+- The real Back + Start input chord closing only its own client while the other three continued.
+- Player rejoin without restarting the session.
+
+The Gaming Mode run exposed a picker regression: filtering a profile already claimed by another player shifted the remembered numeric selection. Version 0.1.1 preserves the selected name and refreshes available profiles when other players join or leave. The regression has pure selection tests and an actual GTK picker test under Xvfb, both passing. The 0.1.1 candidate and 27 checks were installed and passed on the SteamOS host. Its full remembered-profile Gaming Mode rerun was started, but the host stopped responding over LAN and Tailscale before the result could be collected; that final check remains pending.
+
+The gameplay image in the README is an actual capture of the completed offscreen four-client run in a disposable demo world. The controller attachments and button/stick movements were automated; this was not four people playing on four physical Bluetooth controllers. Interface-only captures remain clearly labeled separately. A sanitized [machine-readable result](validation/steamos-local-profiles.json) records the acceptance scope without runtime addresses, controller identifiers, or private player data.
+
+## Remaining limits
+
+A complete post-fix four-client Gaming Mode rerun still needs confirmation. Microsoft sign-in, token refresh and multi-account joining with licensed accounts have not been exercised end to end. Other machines/distributions, a Steam Deck's internal display, fresh combinations of physical controllers/Bluetooth firmware, suspend/resume, and reboot persistence of a new public installation need more testing. The earlier original installation's physical-controller observations do not replace those checks. Automated camera/connection tests do not guarantee an absence of all performance or radio-interference problems during a long play session.
 
 ## Useful hardware acceptance check
 
