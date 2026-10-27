@@ -15,7 +15,7 @@ Connect a controller, choose a profile, and join your Java server. Other players
 - Runs **one independent Java client per player**, with up to **four local players**.
 - Gives each client its own controller, profile, settings, and game directory.
 - Automatically arranges one full screen, two horizontal screens, or three/four quadrants.
-- Offers a controller-operated profile picker and an on-screen name keyboard.
+- Offers a controller-operated profile picker and name keyboard sized to fit every split, down to a 640 × 360 quarter-screen. Steam's own on-screen keyboard is used when it fits the player's screen.
 - Lets a player leave with a button chord and join again later.
 - Keeps a player's slot for a short controller disconnect; reconnecting within 15 seconds preserves the client.
 - Queues launches so several players do not connect to a rate-limited server simultaneously.
@@ -99,6 +99,10 @@ The project imports only Minecraft profile names and UUIDs. Passwords and refres
 
 *Actual picker interface with example profiles and four simulated controller attachments.*
 
+![Two players naming new profiles while others pick or reconnect](docs/screenshots/name-keyboard.png)
+
+*Actual name keyboards in a four-player layout, beside a picker and a disconnected controller's countdown. Example data and simulated controllers.*
+
 ![Empty lobby waiting for controllers](docs/screenshots/lobby.png)
 
 *Actual launcher lobby; game windows appear after players choose a profile.*
@@ -106,11 +110,11 @@ The project imports only Minecraft profile names and UUIDs. Passwords and refres
 | Action | Xbox-style controller |
 | --- | --- |
 | Get a screen | Connect the controller. A profile picker appears in the next free slot. |
-| Choose a profile | D-pad or left stick, then **A** |
+| Choose a profile | D-pad or left stick (hold to repeat), then **A** |
 | Sit out from the picker | **B** |
 | Join again after leaving | **Start/Menu** or **A** |
 | Leave only your screen | Hold **Back/View + Start/Menu** together for about **2 seconds** |
-| Edit a new local name | D-pad chooses a character; **A** types; **B** erases; **Start** saves. ✓ saves and ✕ cancels. |
+| Name a new local profile | Choose **New profile**. If one player has the whole screen, Steam's on-screen keyboard opens: type, then **Enter**. After closing it, **Y** reopens it and **A** switches to the controller keys. Otherwise the controller keyboard appears: **A** types, **B** erases (or goes back when empty), **X** is Shift (twice for caps lock), and **Start** saves and joins. A USB keyboard also types into the player who is naming. Typing an existing name selects that profile. |
 | Return to Steam | Once all players have left, press **B**, or use the lobby's Return to Steam button. |
 
 Button labels vary by controller. Up to four controllers can occupy slots; additional controllers wait until a slot is free. A connected player sitting out still owns their slot until they disconnect. This is a four-player implementation, not an unlimited-player launcher.
@@ -142,6 +146,7 @@ Run:
 | Steam shortcut missing | Fully exit Steam, run `minecraft-couch steam-sync`, then reopen it. With multiple Steam users, it targets the most recently used user config. |
 | Prism does not open | Check AppImage/FUSE support, then rerun file installation. This release requires the managed native launcher, not a sandboxed Flatpak. |
 | Downloads interrupted | Retry Setup. Existing verified files are reused; corrupt or partial downloads are replaced. |
+| Steam keyboard does not appear | It is a full-width panel along the bottom of the screen, so it is only offered when it fits inside the typing player's screen and leaves room for the name field. In practice that means a single player. Everyone else uses the controller keyboard. It needs the Steam client running, as in Gaming Mode. If your Steam keyboard is shorter or taller than the assumed 42% of the screen height, set `MC_COUCH_OSK_HEIGHT` (a fraction) in the shortcut's launch options. |
 
 ### Controller permissions
 
@@ -213,8 +218,9 @@ python3 -m unittest discover -s tests -v
 python3 -m compileall -q mc_couch
 # Optional isolated Linux uinput test (needs device permissions):
 MC_COUCH_UINPUT_TEST=1 python3 -m unittest discover -s tests -p test_input.py -v
-# Reproduce the interface screenshots with synthetic controller attachments:
-xvfb-run -a -s '-screen 0 1440x1000x24' python3 scripts/capture_screenshots.py
+# Reproduce the interface screenshots with synthetic controller attachments
+# (SteamOS renders with Adwaita Sans; install it for matching output):
+xvfb-run -a -s '-screen 0 1920x1080x24' python3 scripts/capture_screenshots.py
 ```
 
 See [validation](docs/VALIDATION.md), [contributing](CONTRIBUTING.md), [release notes](CHANGELOG.md), and [third-party notices](NOTICE.md). Original code is [MIT licensed](LICENSE). Minecraft, Fabric, Prism, Java and mods retain their own licenses and are downloaded separately. Architectural inspiration: [MinecraftSplitscreenSteamdeck](https://github.com/aradanmn/MinecraftSplitscreenSteamdeck); none of its installer or bundled files are redistributed here.

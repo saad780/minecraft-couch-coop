@@ -49,6 +49,8 @@ def launch():
             raise RuntimeError(
                 "Launch from Steam or a desktop session with an X11/Xwayland display."
             )
+        # Steam's keyboard is requested from inside the nested session.
+        env["MC_COUCH_STEAM_DISPLAY"] = env["DISPLAY"]
         compositor_config = data_root() / "compositor-config"
         compositor_config.mkdir(parents=True, exist_ok=True)
         env["XDG_CONFIG_HOME"] = str(compositor_config)

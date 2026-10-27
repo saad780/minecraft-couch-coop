@@ -44,6 +44,18 @@ The Gaming Mode run exposed a picker regression: filtering a profile already cla
 
 The gameplay image in the README is an actual capture of the completed 0.1.1 Gaming Mode run in a disposable demo world. The controller attachments and button/stick movements were automated; this was not four people playing on four physical Bluetooth controllers. Interface-only captures remain clearly labeled separately. A sanitized [machine-readable result](validation/steamos-local-profiles.json) records the acceptance scope without runtime addresses, controller identifiers, or private player data.
 
+## Interface refresh (unreleased)
+
+The redesigned picker and name keyboard were run on the same SteamOS machine in an offscreen KWin/Xwayland compositor. The run used the device's own fonts, four synthetic controllers, a throwaway home directory and a stand-in `steam` command; no Minecraft client started. It ran at 1920 × 1080 and 1280 × 800, and all 20 checks passed at each size:
+
+- With one player, **New profile** requested Steam's keyboard, and that panel received keyboard focus and typed input.
+- When a second player joined, the first switched to the controller keyboard.
+- Quarter-screen players used the controller keyboard, and held D-pad input repeated.
+- With four keyboards and pickers open, every window held its exact quadrant (960 × 540 and 640 × 400 respectively) for seven seconds. Earlier, a keyboard wider than its quadrant flickered there.
+- Typed keys reached the latest naming player, B erased and backed out without also sitting the player out, and sit-out/rejoin worked.
+
+GUI tests check under Xvfb that every panel fits its region at 1920 × 1080, 1280 × 800 and 1280 × 720 for one to four players. Steam's actual on-screen keyboard was not shown during these runs: its typing path through gamescope and the keyboard height assumed for the fit check (42% of the screen) still need a check in Gaming Mode.
+
 ## Remaining limits
 
 Microsoft sign-in, token refresh and multi-account joining with licensed accounts have not been exercised end to end. Other machines/distributions, a Steam Deck's internal display, fresh combinations of physical controllers/Bluetooth firmware, suspend/resume, and reboot persistence of a new public installation need more testing. The earlier original installation's physical-controller observations do not replace those checks. Automated camera/connection tests do not guarantee an absence of all performance or radio-interference problems during a long play session.
