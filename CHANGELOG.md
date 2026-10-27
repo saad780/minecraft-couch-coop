@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Redesign the lobby, profile picker and name keyboard: player colours, profile rows with avatars, a QWERTY keyboard with Shift/caps lock, hold-to-repeat navigation, queue position, a reconnect countdown, and lobby cards for each slot.
+- Size every panel to fit its screen region, down to a 640 × 360 quarter-screen. A panel larger than its region made GTK and the layout script fight over the window size, so the name keyboard flickered. GUI tests now check every layout at 1920 × 1080, 1280 × 800 and 1280 × 720.
+- Build panels once and update them in place, instead of rebuilding every widget on each button press. Reload the KWin layout script only when the layout changes; it now places new windows as they appear.
+- Use Steam's on-screen keyboard for a new name when it fits the player's screen; otherwise use the controller keyboard. The naming player's panel gets keyboard focus, so Steam and USB keyboards type into it.
+- Typing an existing name selects that profile. Mashing B out of name entry no longer also sits the player out. A controller that vanishes during attach no longer leaks its virtual pad and window.
+- Replace the interface screenshots and add one of the name keyboards.
+
 ## 0.1.1 — 2026-10-26
 
 - Fix remembered profile selections changing when another player joins or leaves. Keep the highlighted name stable as the available list changes.

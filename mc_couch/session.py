@@ -4,8 +4,11 @@
 import atexit
 import json
 import os
+from pathlib import Path
+import re
 import signal
 import subprocess
+import threading
 import time
 
 import gi
@@ -16,28 +19,75 @@ from .linux_input import InputDevice, E, enumerate_pads, VirtualGamepad as PadPr
 from .config import Settings, data_root, runtime_root, atomic_json
 from .profiles import Profiles, selection_index
 from .game import start_game, reap_async
+from .ui import NEW, SIT_OUT, NAME_LIMIT, KEY_ROWS, SeatView, LobbyView, install_css
 
 ROOT = data_root()
 
 WIDTH, HEIGHT = 1920, 1080
-ALPHABET = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") + [
-    "⌫",
-    "✓",
-    "✕",
-]
+NAME = re.compile(r"[A-Za-z0-9_]{1,16}")
+# Linux gamepads report the left face button (X) as BTN_NORTH and the top one
+# (Y) as BTN_WEST.
+BUTTONS = {
+    E.BTN_SOUTH: "ok",
+    E.BTN_EAST: "back",
+    E.BTN_START: "start",
+    E.BTN_NORTH: "x",
+    E.BTN_WEST: "y",
+}
+DPAD = {
+    E.BTN_DPAD_UP: "up",
+    E.BTN_DPAD_DOWN: "down",
+    E.BTN_DPAD_LEFT: "left",
+    E.BTN_DPAD_RIGHT: "right",
+}
+# Steam's keyboard is a fixed full-width panel along the bottom of the screen.
+# It is only offered when it lands inside the typing player's own screen and
+# still leaves room above it for the name field; otherwise our keyboard is used.
+OSK_HEIGHT = float(os.environ.get("MC_COUCH_OSK_HEIGHT", "0.42"))
+OSK_FIELD_ROOM = 0.14
 
 
 def log(message):
     print(time.strftime("%H:%M:%S"), message, flush=True)
 
 
-def label(text, style=None):
-    obj = Gtk.Label(label=text)
-    obj.set_line_wrap(True)
-    obj.set_justify(Gtk.Justification.CENTER)
-    if style:
-        obj.get_style_context().add_class(style)
-    return obj
+def osk_fits(rect):
+    if not rect:
+        return False
+    x, y, width, height = rect
+    return (
+        x == 0
+        and width >= WIDTH
+        and y + height >= HEIGHT
+        and height - OSK_HEIGHT * HEIGHT >= OSK_FIELD_ROOM * HEIGHT
+    )
+
+
+def open_steam_keyboard():
+    """Ask the running Steam client for its keyboard, as SteamOS's GTK input module does."""
+    runtime = os.environ.get("STEAM_RUNTIME")
+    candidates = [Path(runtime).parent / "steam"] if runtime else []
+    candidates += [
+        Path.home() / ".local/share/Steam/ubuntu12_32/steam",
+        Path.home() / ".steam/root/ubuntu12_32/steam",
+    ]
+    exe = next((str(p) for p in candidates if p.exists()), "steam")
+    env = os.environ.copy()
+    env.pop("LD_PRELOAD", None)
+    env.pop("LD_LIBRARY_PATH", None)
+    env["DISPLAY"] = os.environ.get("MC_COUCH_STEAM_DISPLAY", ":1")
+    try:
+        proc = subprocess.Popen(
+            [exe, "-if-running", "steam://open/keyboard"],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        threading.Thread(target=proc.wait, daemon=True).start()
+    except OSError as exc:
+        log(f"Steam keyboard: {exc}")
 
 
 class Seat:
@@ -53,27 +103,32 @@ class Seat:
         self.held = set()
         self.chord_since = None
         self.disconnected = None
-        self.last_nav = 0
         self.stop_deadline = None
         self.launched_at = None
         self.game_window_visible = False
         self.error = ""
+        self.error_at = 0
         self.typed = ""
-        self.window = Gtk.Window(title=f"MC Couch Seat {number}")
-        self.window.set_decorated(False)
-        self.window.set_keep_above(True)
-        self.window.connect("delete-event", lambda *_: True)
+        self.shift = "once"
+        self.steam_keys = False
+        self.steam_opened = 0
+        self.back_guard = 0
+        self.rect = None
+        self.directions = {}
+        self.axes = {}
+        self.nav = None
+        self.nav_timer = None
+        self.view = SeatView(
+            number, self.row_clicked, self.key_clicked, self.field_clicked
+        )
+        self.view.set_geometry(WIDTH // 2, HEIGHT // 2)
+        self.window = self.view.window
         self.window.connect("key-press-event", self.keyboard)
-        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.box.set_margin_top(8)
-        self.box.set_margin_bottom(8)
-        self.box.set_margin_start(12)
-        self.box.set_margin_end(12)
-        self.window.add(self.box)
         try:
             self.attach(pad)
             self.render()
         except Exception:
+            # A controller can vanish between the scan and the open.
             self.detach()
             self.proxy.close()
             self.window.destroy()
@@ -89,10 +144,9 @@ class Seat:
         self.disconnected = None
         self.held.clear()
         log(f"Seat {self.number}: {pad['name']} attached")
-        if self.mode == "play":
-            self.window.hide()
-        else:
-            self.render()
+        if self.mode == "edit":
+            self.app.request_focus(self)
+        self.render()
 
     def detach(self):
         if self.watch:
@@ -105,6 +159,7 @@ class Seat:
                 pass
             self.source.close()
             self.source = None
+        self.steer("all", None)
         self.proxy.reset()
 
     def read(self, fd, condition):
@@ -114,40 +169,24 @@ class Seat:
             return False
         try:
             for ev in self.source.read():
+                navigating = self.mode in ("menu", "edit", "off")
                 if ev.type == E.EV_KEY:
                     if ev.value:
                         self.held.add(ev.code)
                     else:
                         self.held.discard(ev.code)
-                    if self.mode in ("menu", "edit", "off") and ev.value == 1:
-                        action = {
-                            E.BTN_SOUTH: "ok",
-                            E.BTN_EAST: "back",
-                            E.BTN_START: "start",
-                            E.BTN_DPAD_UP: "up",
-                            E.BTN_DPAD_DOWN: "down",
-                            E.BTN_DPAD_LEFT: "left",
-                            E.BTN_DPAD_RIGHT: "right",
-                        }.get(ev.code)
-                        if action:
-                            self.action(action)
-                elif ev.type == E.EV_ABS and self.mode in ("menu", "edit"):
-                    value = ev.value
-                    if ev.code in (E.ABS_X, E.ABS_Y):
-                        info = self.source.absinfo(ev.code)
-                        value = (
-                            (value - info.min) / max(1, info.max - info.min) - 0.5
-                        ) * 2
-                        value = 1 if value > 0.65 else -1 if value < -0.65 else 0
-                    if value:
-                        action = None
-                        if ev.code in (E.ABS_HAT0Y, E.ABS_Y):
-                            action = "down" if value > 0 else "up"
-                        elif ev.code in (E.ABS_HAT0X, E.ABS_X):
-                            action = "right" if value > 0 else "left"
-                        if action and time.monotonic() - self.last_nav > 0.14:
-                            self.last_nav = time.monotonic()
-                            self.action(action)
+                    if navigating and ev.code in DPAD:
+                        if ev.value == 1:
+                            self.steer("dpad", DPAD[ev.code])
+                        elif (
+                            ev.value == 0
+                            and self.directions.get("dpad") == DPAD[ev.code]
+                        ):
+                            self.steer("dpad", None)
+                    elif navigating and ev.value == 1 and ev.code in BUTTONS:
+                        self.action(BUTTONS[ev.code])
+                elif ev.type == E.EV_ABS and navigating:
+                    self.axis(ev.code, ev.value)
                 if self.mode in ("play", "loading"):
                     self.proxy.forward(ev, self.source)
         except BlockingIOError:
@@ -159,10 +198,66 @@ class Seat:
             return False
         return True
 
+    def axis(self, code, value):
+        if code in (E.ABS_HAT0X, E.ABS_HAT0Y):
+            self.axes[code] = (value > 0) - (value < 0)
+            x, y = self.axes.get(E.ABS_HAT0X, 0), self.axes.get(E.ABS_HAT0Y, 0)
+            source = "hat"
+        elif code in (E.ABS_X, E.ABS_Y):
+            info = self.source.absinfo(code)
+            amount = ((value - info.min) / max(1, info.max - info.min) - 0.5) * 2
+            # Hysteresis: a resting stick near the threshold must not chatter.
+            if abs(amount) > 0.6:
+                self.axes[code] = 1 if amount > 0 else -1
+            elif abs(amount) < 0.35:
+                self.axes[code] = 0
+            x, y = self.axes.get(E.ABS_X, 0), self.axes.get(E.ABS_Y, 0)
+            source = "stick"
+        else:
+            return
+        if y:
+            direction = "down" if y > 0 else "up"
+        elif x:
+            direction = "right" if x > 0 else "left"
+        else:
+            direction = None
+        self.steer(source, direction)
+
+    def steer(self, source, direction):
+        """Fire on a new direction, then repeat while it is held."""
+        if source == "all":
+            self.directions.clear()
+            self.axes.clear()
+        else:
+            self.directions[source] = direction
+        current = next((d for d in self.directions.values() if d), None)
+        if current == self.nav:
+            return
+        self.nav = current
+        if self.nav_timer:
+            GLib.source_remove(self.nav_timer)
+            self.nav_timer = None
+        if current:
+            self.action(current)
+            self.nav_timer = GLib.timeout_add(380, self.repeat_start)
+
+    def repeat_start(self):
+        self.nav_timer = GLib.timeout_add(110, self.repeat)
+        return self.repeat()
+
+    def repeat(self):
+        if not self.nav or self.mode not in ("menu", "edit") or self.disconnected:
+            self.nav_timer = None
+            return False
+        self.action(self.nav, repeat=True)
+        return True
+
     def lost(self):
         self.detach()
         self.disconnected = time.monotonic()
         self.held.clear()
+        if self.mode == "edit":
+            self.app.release_focus(self)
         self.render()
 
     def choices(self):
@@ -175,8 +270,8 @@ class Seat:
         }
         return (
             [p for p in self.app.profiles if p.lower() not in used]
-            + (["＋ New profile"] if self.app.settings.account_mode == "local" else [])
-            + ["Leave session"]
+            + ([NEW] if self.app.settings.account_mode == "local" else [])
+            + [SIT_OUT]
         )
 
     def sync_selection(self):
@@ -185,90 +280,210 @@ class Seat:
         self.menu_choices = choices
         return choices
 
-    def action(self, action):
+    def show_error(self, message):
+        self.error, self.error_at = message, time.monotonic()
+
+    def action(self, action, repeat=False):
         if self.disconnected:
             return
         if self.mode == "off":
             if action in ("ok", "start"):
                 self.mode = "menu"
-                self.chosen = 0
                 self.app.retile()
                 self.render()
             elif action == "back" and all(s.mode == "off" for s in self.app.seats):
                 self.app.quit()
             return
         if self.mode == "edit":
-            if action in ("up", "down", "left", "right"):
-                delta = {"up": -11, "down": 11, "left": -1, "right": 1}[action]
-                self.chosen = (self.chosen + delta) % len(ALPHABET)
-            elif action == "back":
-                self.typed = self.typed[:-1]
-            elif action == "start":
-                self.save_name()
-                return
-            elif action == "ok":
-                item = ALPHABET[self.chosen]
-                if item == "✓":
-                    self.save_name()
-                    return
-                if item == "✕":
-                    self.mode, self.chosen = "menu", 0
-                elif item == "⌫":
-                    self.typed = self.typed[:-1]
-                elif len(self.typed) < 16:
-                    self.typed += item
-            self.render()
+            self.edit_action(action, repeat)
             return
         if self.mode != "menu":
             return
         choices = self.sync_selection()
         if action in ("up", "left", "down", "right"):
-            self.chosen = (
-                self.chosen + (1 if action in ("down", "right") else -1)
-            ) % len(choices)
+            step = 1 if action in ("down", "right") else -1
+            if repeat and not 0 <= self.chosen + step < len(choices):
+                return
+            self.chosen = (self.chosen + step) % len(choices)
         elif action == "back":
-            self.mode = "off"
-            self.window.hide()
-            self.app.retile()
+            # Mashing B to erase a name must not also sit the player out.
+            if time.monotonic() > self.back_guard:
+                self.sit_out()
             return
         elif action in ("ok", "start"):
-            chosen = choices[self.chosen % len(choices)]
-            if chosen == "＋ New profile":
-                self.mode, self.chosen, self.typed = "edit", 0, ""
-            elif chosen == "Leave session":
-                self.mode = "off"
-                self.window.hide()
-                self.app.retile()
+            self.choose(self.chosen)
+            return
+        self.render()
+
+    def choose(self, index):
+        choices = self.sync_selection()
+        self.chosen = index % len(choices)
+        chosen = choices[self.chosen]
+        if chosen == NEW:
+            self.start_entry()
+        elif chosen == SIT_OUT:
+            self.sit_out()
+        else:
+            self.begin(chosen)
+
+    def sit_out(self):
+        self.mode, self.error = "off", ""
+        self.window.hide()
+        self.app.retile()
+
+    def start_entry(self):
+        self.mode, self.typed, self.shift, self.error = "edit", "", "once", ""
+        self.view.keyboard.place(1, 0)
+        self.steam_keys = osk_fits(self.rect)
+        # Keystrokes from Steam's keyboard or a USB keyboard go to the focused window.
+        self.app.request_focus(self)
+        if self.steam_keys:
+            self.open_steam_keys()
+        self.render()
+
+    def open_steam_keys(self):
+        now = time.monotonic()
+        if now - self.steam_opened > 1.5:
+            self.steam_opened = now
+            open_steam_keyboard()
+
+    def leave_entry(self):
+        self.app.release_focus(self)
+        self.mode, self.steam_keys = "menu", False
+        self.back_guard = time.monotonic() + 0.6
+
+    def edit_action(self, action, repeat=False):
+        if self.steam_keys:
+            # Controller input only reaches us once Steam's keyboard is closed.
+            if action == "y":
+                self.app.request_focus(self)
+                self.open_steam_keys()
+            elif action == "back":
+                self.leave_entry()
+            elif action == "start":
+                self.save_name()
                 return
+            elif action in ("ok", "up", "down", "left", "right"):
+                self.steam_keys = False
+            self.render()
+            return
+        if action in ("up", "down", "left", "right"):
+            self.view.keyboard.move(action, wrap=not repeat)
+            return
+        if action == "ok":
+            self.press(self.view.keyboard.key())
+            return
+        if action == "back":
+            if self.typed:
+                self.erase()
             else:
-                self.begin(chosen)
-                return
+                self.leave_entry()
+        elif action == "x":
+            self.toggle_shift()
+        elif action == "y" and osk_fits(self.rect):
+            self.steam_keys = True
+            self.app.request_focus(self)
+            self.open_steam_keys()
+        elif action == "start":
+            self.save_name()
+            return
+        self.render()
+
+    def press(self, key):
+        if key == "shift":
+            self.toggle_shift()
+        elif key == "erase":
+            self.erase()
+        elif key == "cancel":
+            self.leave_entry()
+        elif key == "done":
+            self.save_name()
+            return
+        else:
+            self.type_text(
+                key if self.shift != "off" or not key.isalpha() else key.lower()
+            )
+            return
+        self.render()
+
+    def toggle_shift(self):
+        self.shift = {"off": "once", "once": "lock", "lock": "off"}[self.shift]
+
+    def erase(self):
+        self.typed = self.typed[:-1]
+        if not self.typed and self.shift == "off":
+            self.shift = "once"
+        self.error = ""
+
+    def type_text(self, chars):
+        for char in chars:
+            if not NAME.fullmatch(char):
+                self.show_error("Use letters, numbers or _")
+                break
+            if len(self.typed) >= NAME_LIMIT:
+                self.show_error(f"Names can be up to {NAME_LIMIT} characters")
+                break
+            self.typed += char
+            self.error = ""
+            if self.shift == "once":
+                self.shift = "off"
         self.render()
 
     def save_name(self):
         name = self.typed.strip()
         if not name:
-            self.error = "Enter a name first."
+            self.show_error("Type a name first")
             self.render()
             return
         existing = next(
             (p for p in self.app.profiles if p.lower() == name.lower()), None
         )
         if existing:
-            self.error = "That name already exists. Choose it from the list."
-            self.mode, self.chosen = "menu", 0
+            self.leave_entry()
+            choices = self.sync_selection()
+            if existing in choices:
+                self.chosen = choices.index(existing)
+                self.show_error(f"{existing} already exists. Press A to play.")
+            else:
+                self.show_error(f"{existing} is already playing")
             self.render()
             return
         try:
             self.app.profile_store.add_local(name)
         except ValueError as exc:
-            self.error = str(exc)
+            self.show_error(str(exc))
             self.render()
             return
+        self.leave_entry()
         self.app.profiles = [p["name"] for p in self.app.profile_store.visible()]
+        self.menu_choices = []
+        self.chosen = self.choices().index(name)
         self.begin(name)
 
     def keyboard(self, widget, event):
+        if self.mode == "edit" and not self.disconnected:
+            if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                self.save_name()
+            elif event.keyval == Gdk.KEY_BackSpace:
+                self.erase()
+                self.render()
+            elif event.keyval == Gdk.KEY_Escape:
+                self.leave_entry()
+                self.render()
+            elif not self.steam_keys and event.keyval in (
+                Gdk.KEY_Up,
+                Gdk.KEY_Down,
+                Gdk.KEY_Left,
+                Gdk.KEY_Right,
+            ):
+                self.view.keyboard.move(Gdk.keyval_name(event.keyval).lower())
+            else:
+                char = chr(Gdk.keyval_to_unicode(event.keyval) or 0)
+                if char.isprintable() and char != "\0":
+                    self.type_text(char)
+                else:
+                    return False
+            return True
         action = {
             Gdk.KEY_Up: "up",
             Gdk.KEY_Down: "down",
@@ -282,85 +497,112 @@ class Seat:
             return True
         return False
 
-    def button(self, text, index, columns=None):
-        item = Gtk.Button(label=text)
-        item.set_can_focus(False)
-        if index == self.chosen:
-            item.get_style_context().add_class("selected")
-        item.connect(
-            "clicked", lambda *_: (setattr(self, "chosen", index), self.action("ok"))
-        )
-        if columns:
-            columns.attach(item, index % 11, index // 11, 1, 1)
-        else:
-            self.box.pack_start(item, False, False, 0)
+    def row_clicked(self, index):
+        if self.mode == "menu" and not self.disconnected:
+            self.choose(index)
+
+    def key_clicked(self, row, index):
+        if self.mode == "edit" and not self.disconnected:
+            self.view.keyboard.place(row, index)
+            self.press(KEY_ROWS[row][index][0])
+
+    def field_clicked(self):
+        if self.mode == "edit" and osk_fits(self.rect):
+            self.steam_keys = True
+            self.app.request_focus(self)
+            self.open_steam_keys()
+            self.render()
+
+    def apply_rect(self, rect):
+        if rect == self.rect:
+            return
+        self.rect = rect
+        self.view.set_geometry(rect[2], rect[3])
+        self.window.resize(rect[2], rect[3])
+        self.window.move(rect[0], rect[1])
+        if self.mode == "edit" and self.steam_keys and not osk_fits(rect):
+            # The layout changed under Steam's keyboard; finish with ours.
+            self.steam_keys = False
+        self.render()
 
     def render(self):
-        for obj in self.box.get_children():
-            self.box.remove(obj)
         if self.mode == "off":
             self.window.hide()
             return
-        self.box.pack_start(label(f"PLAYER {self.number}", "heading"), False, False, 0)
+        view = self.view
+        server = self.app.settings.server
         if self.disconnected:
-            text = "Controller disconnected\nReconnect to keep your screen."
-            self.box.pack_start(label(text), True, True, 0)
+            # Shown over a running game too, so the player knows why it stopped.
+            left = self.app.settings.reconnect_seconds - (
+                time.monotonic() - self.disconnected
+            )
+            view.show_status(
+                None,
+                "Controller disconnected",
+                f"Reconnect within {max(0, int(left + 0.99))} s to keep your screen.",
+                False,
+            )
+        elif self.mode == "play" or (
+            self.mode == "loading" and self.game_window_visible
+        ):
+            self.window.hide()
+            return
         elif self.mode == "menu":
-            self.box.pack_start(label("Choose your profile"), False, False, 0)
             choices = self.sync_selection()
-            self.chosen %= len(choices)
-            # Keep long profile lists usable on a 540-pixel quadrant.
-            first = max(0, min(self.chosen - 1, len(choices) - 4))
-            for i in range(first, min(first + 4, len(choices))):
-                text = choices[i]
-                self.button(text, i)
-            self.box.pack_start(
-                label("D-pad: choose    A: join    B: sit out", "hint"), True, True, 0
+            view.show_menu(
+                choices, self.chosen, self.app.last_profiles.get(self.key), self.error
             )
         elif self.mode == "edit":
-            self.box.pack_start(label(self.typed + "▏", "name"), False, False, 0)
-            grid = Gtk.Grid(column_spacing=3, row_spacing=3)
-            grid.set_column_homogeneous(True)
-            self.box.pack_start(grid, True, True, 0)
-            for i, text in enumerate(ALPHABET):
-                self.button(text, i, grid)
-            self.box.pack_start(
-                label(
-                    "D-pad: move    A: type    B: erase    Start: save & join", "hint"
-                ),
-                False,
-                False,
-                0,
+            view.show_entry(
+                self.typed,
+                self.shift,
+                self.steam_keys,
+                osk_fits(self.rect),
+                self.error,
+            )
+        elif self.mode == "queued":
+            seats = self.app.seats
+            ahead = sum(
+                1
+                for s in seats
+                if s.mode == "loading"
+                or (
+                    s.mode == "queued"
+                    and s.source
+                    and seats.index(s) < seats.index(self)
+                )
+            )
+            if not ahead:
+                detail = "Starting now."
+            elif ahead == 1:
+                detail = "You are next."
+            else:
+                detail = f"{ahead} players ahead of you."
+            view.show_status(
+                self.profile,
+                "Waiting for your turn",
+                f"Players join one at a time. {detail}",
+                True,
+                self.error,
+            )
+        elif self.mode == "stopping":
+            view.show_status(
+                self.profile, "Leaving the world…", "Closing Minecraft.", True
             )
         else:
-            self.box.pack_start(
-                label(
-                    f"{self.profile or ''}\n"
-                    + (
-                        "Leaving the world…"
-                        if self.mode == "stopping"
-                        else "Waiting to join the server…"
-                        if self.mode == "queued"
-                        else "Starting Minecraft and joining the server…"
-                    )
-                ),
+            view.show_status(
+                self.profile,
+                "Starting Minecraft…",
+                f"Joining {server}.",
                 True,
-                True,
-                0,
+                self.error,
             )
-            self.box.pack_start(
-                label("Hold Back + Start for 2 seconds to leave your screen.", "hint"),
-                False,
-                False,
-                0,
-            )
-        if self.error:
-            self.box.pack_start(label(self.error, "error"), False, False, 0)
-        self.window.show_all()
+        if not self.window.get_visible():
+            self.window.show()
 
     def begin(self, name):
         if not self.proxy.ready():
-            self.error = "Preparing controller. Press A again in a moment."
+            self.show_error("Preparing controller. Press A again in a moment.")
             self.render()
             return
         if any(
@@ -370,7 +612,7 @@ class Seat:
             and s.profile.lower() == name.lower()
             for s in self.app.seats
         ):
-            self.error = "That profile is already playing."
+            self.show_error("That profile is already playing.")
             self.render()
             return
         self.profile, self.mode, self.error = name, "queued", ""
@@ -401,7 +643,7 @@ class Seat:
             self.app.retile()
         except Exception as exc:
             log(f"Seat {self.number}: launch failed: {exc}")
-            self.error = str(exc)
+            self.show_error(str(exc))
             self.mode = "menu"
             self.render()
 
@@ -429,6 +671,9 @@ class Seat:
                 self.stop()
         else:
             self.chord_since = None
+        if self.error and now - self.error_at > 6 and self.mode in ("menu", "edit"):
+            self.error = ""
+            self.render()
         if self.proc:
             status = self.proc.poll()
             if status is not None:
@@ -436,11 +681,10 @@ class Seat:
                 reap_async(self.proc)
                 self.proc = None
                 self.output = None
-                self.error = (
-                    ""
-                    if status in (0, 143, -15)
-                    else "Minecraft closed. Press Start to try again."
-                )
+                if status in (0, 143, -15):
+                    self.error = ""
+                else:
+                    self.show_error("Minecraft closed. Press Start to try again.")
                 self.mode = "off"
                 self.window.hide()
                 self.app.retile()
@@ -468,6 +712,9 @@ class Lobby:
         self.seats = []
         self.last_scan = 0
         self.last_layout = 0
+        self.last_script = 0
+        self.script_signature = None
+        self.focus = None
         self.closed = False
         self.launch_after = 0
         self.profile_store = Profiles(self.settings)
@@ -475,39 +722,11 @@ class Lobby:
         self.last_profiles = self.profile_store.controllers
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None) if not preview else None
         self.script_path = runtime_root() / "layout.js"
-        self.base = Gtk.Window(title="MC Couch Lobby")
-        self.base.set_decorated(False)
+        self.view = LobbyView(self.settings.server, self.quit)
+        self.base = self.view.window
         self.base.set_default_size(WIDTH, HEIGHT)
         self.base.connect("delete-event", lambda *_: (self.quit(), True)[1])
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28)
-        box.set_valign(Gtk.Align.CENTER)
-        box.set_halign(Gtk.Align.CENTER)
-        self.base.add(box)
-        box.pack_start(label("MINECRAFT", "title"), False, False, 0)
-        box.pack_start(
-            label("Couch multiplayer · Java Edition", "heading"), False, False, 0
-        )
-        box.pack_start(
-            label(
-                "Connect a controller to choose a profile.\nUp to 4 players can play together."
-            ),
-            False,
-            False,
-            0,
-        )
-        box.pack_start(
-            label(
-                "Already connected? Press Start to join.\nHold Back + Start for 2 seconds to leave your screen.\nWhen everyone has left, press B to return to Steam.",
-                "hint",
-            ),
-            False,
-            False,
-            0,
-        )
-        exit_button = Gtk.Button(label="Return to Steam")
-        exit_button.connect("clicked", lambda *_: self.quit())
-        box.pack_start(exit_button, False, False, 0)
-        self.base.show_all()
+        self.update_lobby()
         self.save_profiles()
         if not preview:
             GLib.timeout_add(50, self.tick)
@@ -519,6 +738,17 @@ class Lobby:
     def save_profiles(self):
         self.profile_store.controllers = self.last_profiles
         self.profile_store.save()
+
+    def request_focus(self, seat):
+        self.focus = seat
+        if not self.preview:
+            seat.window.present()
+        self.retile()
+
+    def release_focus(self, seat):
+        if self.focus is seat:
+            self.focus = None
+            self.retile()
 
     def tick(self):
         now = time.monotonic()
@@ -549,13 +779,15 @@ class Lobby:
             for seat in list(self.seats):
                 if seat.source and seat.source.path not in paths:
                     seat.lost()
-                if (
-                    seat.disconnected
-                    and now - seat.disconnected > self.settings.reconnect_seconds
-                ):
-                    seat.close()
-                    self.seats.remove(seat)
-                    self.retile()
+                if seat.disconnected:
+                    if now - seat.disconnected > self.settings.reconnect_seconds:
+                        if self.focus is seat:
+                            self.focus = None
+                        seat.close()
+                        self.seats.remove(seat)
+                        self.retile()
+                    else:
+                        seat.render()
             for pad in pads:
                 if any(s.source and s.source.path == pad["path"] for s in self.seats):
                     continue
@@ -596,6 +828,9 @@ class Lobby:
             )
             if queued:
                 queued.launch()
+                for seat in self.seats:
+                    if seat.mode == "queued":
+                        seat.render()
         if now - self.last_layout > 1:
             self.retile()
         return True
@@ -636,30 +871,54 @@ class Lobby:
             layout.append(
                 {"title": f"MC Couch Seat {seat.number}", "pid": pid, "rect": rect}
             )
-            seat.window.resize(rect[2], rect[3])
-            seat.window.move(rect[0], rect[1])
-        js = (
-            """const layout = %s;
-for (const w of workspace.windowList()) {
+            # Only touch GTK geometry on change; resizing every second made panels jump.
+            seat.apply_rect(rect)
+        focus = None
+        if self.focus and self.focus.mode == "edit":
+            focus = f"MC Couch Seat {self.focus.number}"
+        self.update_lobby(len(active))
+        signature = json.dumps([layout, focus])
+        # The script stays loaded and places windows as they appear, so it only
+        # needs reloading when the layout changes, plus a slow safety re-apply.
+        if (
+            signature != self.script_signature
+            or time.monotonic() - self.last_script > 5
+        ):
+            self.script_signature = signature
+            self.last_script = time.monotonic()
+            self.load_script(layout, focus)
+        self.check_loading(active, layout)
+        self.write_state()
+
+    def load_script(self, layout, focus):
+        js = """const layout = %s;
+const focus = %s;
+function place(w) {
   if (w.caption === 'MC Couch Lobby') {
     w.noBorder = true; w.keepBelow = true;
-    w.frameGeometry = {x:0,y:0,width:WIDTH,height:HEIGHT};
+    w.frameGeometry = {x:0, y:0, width:%d, height:%d};
+    return;
   }
   for (const s of layout) {
     if (w.caption === s.title || (s.pid && w.pid === s.pid)) {
-      w.noBorder = true; w.fullScreen = false;
+      w.noBorder = true;
+      if (w.fullScreen) w.fullScreen = false;
       w.setMaximize(false, false);
-      w.frameGeometry = {x:s.rect[0], y:s.rect[1], width:s.rect[2], height:s.rect[3]};
+      const g = w.frameGeometry;
+      if (g.x !== s.rect[0] || g.y !== s.rect[1] || g.width !== s.rect[2] || g.height !== s.rect[3])
+        w.frameGeometry = {x:s.rect[0], y:s.rect[1], width:s.rect[2], height:s.rect[3]};
     }
   }
+  if (focus && w.caption === focus && workspace.activeWindow !== w)
+    workspace.activeWindow = w;
 }
-""".replace("WIDTH", str(WIDTH)).replace("HEIGHT", str(HEIGHT))
-            % json.dumps(layout)
-        )
+for (const w of workspace.windowList()) place(w);
+workspace.windowAdded.connect(place);
+""" % (json.dumps(layout), json.dumps(focus), WIDTH, HEIGHT)
         self.script_path.write_text(js)
+        if self.preview:
+            return
         try:
-            if self.preview:
-                return
             self.call(
                 "/Scripting",
                 "org.kde.kwin.Scripting",
@@ -675,6 +934,8 @@ for (const w of workspace.windowList()) {
             self.call(f"/Scripting/Script{script_id}", "org.kde.kwin.Script", "run")
         except GLib.Error as exc:
             log("Window layout: " + exc.message)
+
+    def check_loading(self, active, layout):
         # Show Minecraft as soon as its window exists, including any connection
         # error or controller prompt. Track actual world entry independently.
         for seat in active:
@@ -713,6 +974,40 @@ for (const w of workspace.windowList()) {
                     self.launch_after = (
                         time.monotonic() + self.settings.join_delay_seconds
                     )
+
+    def update_lobby(self, active=0):
+        # The backdrop shows whatever the player screens leave uncovered.
+        if active == 3:
+            region = (WIDTH // 2, HEIGHT // 2, WIDTH // 2, HEIGHT // 2)
+        else:
+            region = (0, 0, WIDTH, HEIGHT)
+        cards = []
+        for n in range(1, 5):
+            seat = next((s for s in self.seats if s.number == n), None)
+            if n > self.settings.max_players:
+                cards.append(("—", "Not used", False))
+            elif not seat:
+                cards.append(("Open", "Connect a controller", False))
+            elif seat.disconnected:
+                cards.append(
+                    (seat.profile or f"Player {n}", "Controller reconnecting…", True)
+                )
+            elif seat.mode == "off":
+                cards.append(
+                    (f"Player {n}", seat.error or "Sitting out · press Start", True)
+                )
+            elif seat.mode in ("menu", "edit"):
+                cards.append((f"Player {n}", "Choosing a profile", True))
+            else:
+                state = {
+                    "queued": "Waiting to join",
+                    "loading": "Joining…",
+                    "stopping": "Leaving…",
+                }.get(seat.mode, "Playing")
+                cards.append((seat.profile, state, True))
+        self.view.update(region, cards)
+
+    def write_state(self):
         state = {
             "display": os.environ.get("DISPLAY"),
             "dbus": os.environ.get("DBUS_SESSION_BUS_ADDRESS"),
@@ -728,6 +1023,14 @@ for (const w of workspace.windowList()) {
                     "js": s.proxy.js,
                     "controller_ready": s.proxy.ready(),
                     "pid": s.proc.pid if s.proc else None,
+                    "entry": (
+                        {
+                            "text": s.typed,
+                            "keyboard": "steam" if s.steam_keys else "controller",
+                        }
+                        if s.mode == "edit"
+                        else None
+                    ),
                 }
                 for s in self.seats
             ],
@@ -750,20 +1053,7 @@ for (const w of workspace.windowList()) {
 
 
 def main():
-    css = Gtk.CssProvider()
-    css.load_from_data(b"""
-window { background: #172624; color: #eef4e9; font-family: sans-serif; font-size: 17px; }
-button { background: #29433a; color: #eef4e9; border: 2px solid #496358; border-radius: 5px; padding: 3px 8px; min-height: 18px; }
-button.selected { background: #4f7b39; border-color: #c0ed8b; color: white; }
-.title { font-size: 72px; font-weight: bold; }
-.heading { font-size: 24px; font-weight: bold; color: #c0ed8b; }
-.name { font-size: 24px; }
-.hint { color: #c0cbbf; font-size: 14px; }
-.error { color: #ffb29c; }
-""")
-    Gtk.StyleContext.add_provider_for_screen(
-        Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-    )
+    install_css()
     app = Lobby()
     app.started = time.monotonic()
     Gtk.main()
