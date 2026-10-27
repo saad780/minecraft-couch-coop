@@ -95,6 +95,14 @@ class KernelIntegrationTests(unittest.TestCase):
             # remains alive at the same node instead of becoming a new gamepad.
             physical.close()
             physical = VirtualGamepad(96, test=True)
+            for _ in range(100):
+                if physical.ready():
+                    break
+                time.sleep(0.02)
+            self.assertTrue(
+                physical.ready(),
+                "udev did not grant access to the reconnected controller",
+            )
             reopened = InputDevice(physical.event)
             try:
                 physical.write(E.EV_KEY, E.BTN_EAST, 1)

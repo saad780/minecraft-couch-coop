@@ -14,7 +14,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Gio
 from .linux_input import InputDevice, E, enumerate_pads, VirtualGamepad as PadProxy
 from .config import Settings, data_root, runtime_root, atomic_json
-from .profiles import Profiles
+from .profiles import Profiles, selection_index
 from .game import start_game, reap_async
 
 ROOT = data_root()
@@ -49,6 +49,7 @@ class Seat:
         self.profile = None
         self.proc = self.output = None
         self.chosen = 0
+        self.menu_choices = []
         self.held = set()
         self.chord_since = None
         self.disconnected = None
@@ -178,6 +179,12 @@ class Seat:
             + ["Leave session"]
         )
 
+    def sync_selection(self):
+        choices = self.choices()
+        self.chosen = selection_index(self.menu_choices, choices, self.chosen)
+        self.menu_choices = choices
+        return choices
+
     def action(self, action):
         if self.disconnected:
             return
@@ -214,7 +221,7 @@ class Seat:
             return
         if self.mode != "menu":
             return
-        choices = self.choices()
+        choices = self.sync_selection()
         if action in ("up", "left", "down", "right"):
             self.chosen = (
                 self.chosen + (1 if action in ("down", "right") else -1)
@@ -300,7 +307,7 @@ class Seat:
             self.box.pack_start(label(text), True, True, 0)
         elif self.mode == "menu":
             self.box.pack_start(label("Choose your profile"), False, False, 0)
-            choices = self.choices()
+            choices = self.sync_selection()
             self.chosen %= len(choices)
             # Keep long profile lists usable on a 540-pixel quadrant.
             first = max(0, min(self.chosen - 1, len(choices) - 4))
@@ -369,7 +376,6 @@ class Seat:
         self.profile, self.mode, self.error = name, "queued", ""
         for seat in self.app.seats:
             if seat is not self and seat.mode == "menu":
-                seat.chosen = min(seat.chosen, len(seat.choices()) - 1)
                 seat.render()
         self.render()
         self.app.retile()
@@ -579,6 +585,9 @@ class Lobby:
                     log(f"Controller attach failed: {exc}")
         for seat in list(self.seats):
             seat.tick(now)
+        for seat in self.seats:
+            if seat.mode == "menu" and seat.menu_choices != seat.choices():
+                seat.render()
         # Paper limits connections from one IP. Wait for the previous client to
         # finish joining, then leave a 5-second gap before starting the next.
         if not any(s.mode == "loading" for s in self.seats) and now > self.launch_after:

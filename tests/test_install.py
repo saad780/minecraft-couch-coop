@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from mc_couch import __version__
 
 
 class InstallerTests(unittest.TestCase):
@@ -29,7 +31,7 @@ class InstallerTests(unittest.TestCase):
                 [str(binary), "--version"], env=env, capture_output=True, text=True
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout.strip(), "0.1.0")
+            self.assertEqual(result.stdout.strip(), __version__)
             self.assertTrue((root / "data/app/prism-wrapper.py").exists())
             profile = root / "data/profiles.json"
             profile.write_text('{"keep":"my data"}')
@@ -41,8 +43,14 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertEqual(update.returncode, 0, update.stderr)
             self.assertTrue((root / "data/app.previous").is_dir())
+            # This isolated HOME has no Steam installation. The host may be
+            # running Steam, so mock only that external process check here.
+            command = 'from unittest.mock import patch; from mc_couch.installer import uninstall; patcher=patch("mc_couch.steam.steam_running",return_value=False); patcher.start(); uninstall()'
             removed = subprocess.run(
-                [str(binary), "uninstall"], env=env, capture_output=True, text=True
+                [sys.executable, "-c", command],
+                env=env | {"PYTHONPATH": str(root / "data/app")},
+                capture_output=True,
+                text=True,
             )
             self.assertEqual(removed.returncode, 0, removed.stderr)
             self.assertFalse(binary.exists())

@@ -9,10 +9,9 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+from . import __version__
 
-USER_AGENT = (
-    "MinecraftCouchCoop/0.1.0 (+https://github.com/saad780/minecraft-couch-coop)"
-)
+USER_AGENT = f"MinecraftCouchCoop/{__version__} (+https://github.com/saad780/minecraft-couch-coop)"
 
 
 def request(url):

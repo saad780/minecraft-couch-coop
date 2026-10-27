@@ -2,6 +2,16 @@ import json
 from .config import atomic_json, data_root, offline_uuid, validate_name
 
 
+def selection_index(previous, current, index):
+    """Keep a highlighted name stable when another player claims a profile."""
+    if not current:
+        return 0
+    if previous and previous != current:
+        selected = previous[index % len(previous)]
+        return current.index(selected) if selected in current else 0
+    return index % len(current)
+
+
 class Profiles:
     def __init__(self, settings):
         self.settings = settings
